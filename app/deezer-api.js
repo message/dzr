@@ -33,8 +33,8 @@ function Deezer() {
 
 Deezer.prototype.init = function(callback) {
 	var self = this;
-	request.get({url: "https://www.deezer.com/", headers: this.httpHeaders, jar: true}, (function(err, res, body) {
-		if(!err && res.statusCode == 200) {
+	request.get({url: "https://www.deezer.com/login", headers: this.httpHeaders, jar: true}, (function(err, res, body) {
+		if (! err && res.statusCode == 200) {
 			callback(null, null);
 		} else {
 			callback(null, new Error("Unable to connect to deezer"));
@@ -43,19 +43,46 @@ Deezer.prototype.init = function(callback) {
 };
 
 Deezer.prototype.login = function(email, password, callback) {
-	request.post({
-		url: "https://www.deezer.com/ajax/action.php",
-		form: {type: "login", mail: email, password: password},
-		headers: this.httpHeaders,
-		jar: true
-	}, (function(err, res, body) {
-		if (! err && res.statusCode == 200) {
-			console.log("Logged in successfully");
-			callback(null, null);
-		} else {
-			callback(null, new Error("Unable to connect to deezer"));
+	let headers = this.httpHeaders;
+	request.get({url: "https://www.deezer.com/login", headers: headers, jar: true}, (function(err, res, body) {
+		if (err) {
+			callback(null, new Error("Failed to make initialization request"));
 		}
-	}).bind(this));
+
+		var cid = Math.floor(1e9 * Math.random());
+		var url = "https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token=&cid=" + cid;
+
+		request.get({url: url, headers: headers, jar: true}, function(err, res, body) {
+			if (err || res.statusCode != 200 || ! body) {
+				callback(null, new Error("Failed to get user data confirm hash"));
+			} else {
+				var json = JSON.parse(body);
+				if (json.error) {
+					console.log("Wrong id");
+					callback(null, new Error());
+				}
+
+				let form = {type: "login", mail: email, password: password, checkFormLogin: json.results.checkFormLogin};
+
+				console.log(form);
+
+				request.post({
+					url: "https://www.deezer.com/ajax/action.php",
+					form: form,
+					headers: headers,
+					jar: true
+				}, (function(err, res, body) {
+					if (! err && res.statusCode == 200 && body != "error") {
+						console.log("Logged in successfully");
+						callback(null, null);
+					} else {
+						console.log("Failed to log in");
+						callback(null, new Error("Unable to connect to deezer"));
+					}
+				}).bind(this));
+			}
+		});
+	}));
 };
 
 Deezer.prototype.getPlaylist = function(id, callback) {
@@ -66,7 +93,6 @@ Deezer.prototype.getPlaylist = function(id, callback) {
 			callback(null, res)
 		}
 	});
-
 };
 
 Deezer.prototype.getAlbum = function(id, callback) {
@@ -128,7 +154,8 @@ Deezer.prototype.getAlbumTracks = function(id, callback) {
 			callback(res);
 		} else {
 			callback(null, res)
-		};
+		}
+		;
 
 	});
 
@@ -205,7 +232,8 @@ Deezer.prototype.search = function(text, type, callback) {
 		type = "";
 	} else {
 		type += "?";
-	};
+	}
+	;
 
 	request.get({url: "https://api.deezer.com/search/" + type + "q=" + text, headers: this.httpHeaders, jar: true}, function(err, res, body) {
 		if (! err && res.statusCode == 200) {
@@ -241,7 +269,6 @@ Deezer.prototype.hasTrackAlternative = function(id, callback) {
 };
 
 Deezer.prototype.getDownloadUrl = function(md5Origin, id, format, mediaVersion) {
-
 	var urlPart = md5Origin + "¤" + format + "¤" + id + "¤" + mediaVersion;
 	var md5sum = crypto.createHash('md5');
 	md5sum.update(new Buffer(urlPart, 'binary'));
