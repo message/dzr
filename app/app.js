@@ -582,7 +582,9 @@ io.sockets.on('connection', function(socket) {
 
 	function downloadTrack(id, settings, callback) {
 		Deezer.getTrack(id, function(track, err) {
+			console.log(1);
 			if (err) {
+				console.log(err);
 				callback(err);
 				return;
 			}
@@ -590,7 +592,6 @@ io.sockets.on('connection', function(socket) {
 			track.trackSocket = socket;
 
 			settings = settings || {};
-			// winston.log('debug', 'TRACK:', track);
 			if (track["VERSION"]) track["SNG_TITLE"] += " " + track["VERSION"];
 
 			let metadata = {
@@ -611,10 +612,7 @@ io.sockets.on('connection', function(socket) {
 				metadata.image = Deezer.albumPicturesHost + track["ALB_PICTURE"] + settings.artworkSize;
 			}
 
-			let filename = `${metadata.artist} - ${metadata.title}`;
-			if (settings.filename) {
-				filename = settingsRegex(metadata, settings.filename, settings.playlist);
-			}
+			let filename = `${metadata.artist} - ${metadata.title} - ${id}`;
 
 			let filepath = mainFolder;
 			if (settings.createArtistFolder || settings.createAlbumFolder) {
@@ -669,16 +667,21 @@ io.sockets.on('connection', function(socket) {
 
 			Deezer.decryptTrack(track, function(buffer, err) {
 				if (err && err.message == "aborted") {
+					console.error("Failed to decrypt track", err);
 					socket.currentItem.cancelFlag = true;
 					callback();
 					return;
 				}
 				if (err) {
+					console.error("Error while decrypting track", err);
+
 					Deezer.hasTrackAlternative(id, function(alternative, err) {
 						if (err || ! alternative) {
+							console.error("Track with id %s doesn't have alternative download", id);
 							callback(err);
 							return;
 						}
+						console.info("Trying to download alternative id", id, alternative);
 						downloadTrack(alternative.id, settings, callback);
 					});
 					return;
@@ -686,6 +689,7 @@ io.sockets.on('connection', function(socket) {
 
 				fs.writeFile(writePath, buffer, function(err) {
 					if (err) {
+						console.error("Failed to write file to " + writePath);
 						callback(err);
 						return;
 					}
@@ -698,7 +702,7 @@ io.sockets.on('connection', function(socket) {
 						}
 					}
 
-					console.log("Downloaded: " + metadata.artist + " - " + metadata.title);
+					console.log("Downloaded: " + id + " - " + metadata.artist + " - " + metadata.title);
 					metadata.artist = '';
 					var first = true;
 					track['ARTISTS'].forEach(function(artist) {
@@ -726,11 +730,9 @@ io.sockets.on('connection', function(socket) {
 							exec('metaflac --set-tag=DISCNUMBER=' + metadata.discNumber + ' --set-tag=TITLE="' + metadata.title + '" --set-tag=ISRC="' + track["ISRC"] + '" --set-tag=ARTIST="' + metadata.artist + '" --set-tag=ALBUM="' + metadata.album + '" --set-tag=DATE="' + metadata.year + '" --set-tag=TRACKNUMBER=' + metadata.trackNumber + ' --import-picture-from="' + metadata.image + '" "' + writePath + '"', function(err, data) {
 								if (err) {
 									console.log(err);
-								}
-								else
-
+								} else {
 									console.log(data.toString());
-
+								}
 							});
 						}
 					} else {
