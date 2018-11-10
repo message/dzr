@@ -62,49 +62,66 @@ function Deezer() {
 
 Deezer.prototype.init = function (username, password, callback) {
 	var self = this;
-	NRrequest.post({
-		url: "https://www.deezer.com/ajax/action.php",
-		headers: this.httpHeaders,
-		form: {
-			type: 'login',
-			mail: username,
-			password: password
-		},
-		jar: true
-	}, (function (err, res, body) {
-		if (err || res.statusCode != 200) {
-			callback(new Error("Unable to load deezer.com"));
-		} else if (body.indexOf("success") > -1) {
-			request.get({
-				url: "https://www.deezer.com/",
+
+		var cid = Math.floor(1e9 * Math.random());
+		var url = "https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token=&cid=" + cid;
+
+		NRrequest.get({url: url, headers: this.httpHeaders, jar: true}, function(err, res, body) {
+			if (err || res.statusCode != 200 || ! body) {
+				callback(null, new Error("Failed to get user data confirm hash"));
+			} else {
+				var json = JSON.parse(body);
+				if (json.error) {
+					console.log("Wrong id");
+					callback(null, new Error());
+				}
+
+			NRrequest.post({
+				url: "https://www.deezer.com/ajax/action.php",
 				headers: this.httpHeaders,
+				form: {
+					type: 'login',
+					mail: username,
+					password: password,
+					 checkFormLogin: json.results.checkFormLogin
+				},
 				jar: true
 			}, (function (err, res, body) {
-				if (!err && res.statusCode == 200) {
-					// var regex = new RegExp(/checkForm\s*=\s*[\"|'](.*)[\"|']/g); // old regex
-					var regex = new RegExp(/"api_key":"([^",]*)/g);
-					var _token = regex.exec(body);
-
-					if (_token instanceof Array && _token[1]) {
-						self.apiQueries.api_token = _token[1];
-						console.log(`NEW TOKEN API: ${_token[1]}`)
-						// GET USER ID
-						const userRegex = new RegExp(/{"USER_ID":"?([^",]*)/g);
-						const userId = userRegex.exec(body)[1];
-						self.userId = userId;
-
-						callback(null, null);
-					} else {
-						callback(new Error("Unable to initialize Deezer API"));
-					}
-				} else {
+				if (err || res.statusCode != 200) {
 					callback(new Error("Unable to load deezer.com"));
+				} else if (body.indexOf("success") > -1) {
+					request.get({
+						url: "https://www.deezer.com/",
+						headers: this.httpHeaders,
+						jar: true
+					}, (function (err, res, body) {
+						if (!err && res.statusCode == 200) {
+							// var regex = new RegExp(/checkForm\s*=\s*[\"|'](.*)[\"|']/g); // old regex
+							var regex = new RegExp(/"api_key":"([^",]*)/g);
+							var _token = regex.exec(body);
+
+							if (_token instanceof Array && _token[1]) {
+								self.apiQueries.api_token = _token[1];
+								console.log(`NEW TOKEN API: ${_token[1]}`)
+								// GET USER ID
+								const userRegex = new RegExp(/{"USER_ID":"?([^",]*)/g);
+								const userId = userRegex.exec(body)[1];
+								self.userId = userId;
+
+								callback(null, null);
+							} else {
+								callback(new Error("Unable to initialize Deezer API"));
+							}
+						} else {
+							callback(new Error("Unable to load deezer.com"));
+						}
+					}).bind(self));
+				} else {
+					callback(new Error("Incorrect email or password."));
 				}
-			}).bind(self));
-		} else {
-			callback(new Error("Incorrect email or password."));
-		}
-	}));
+			}));
+
+}});
 }
 
 // GET USER PLAYLISTS
